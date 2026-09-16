@@ -1,176 +1,203 @@
 import datetime
-import os
+from io import BytesIO
+import openpyxl
+import pandas as pd
 import streamlit as st
 
 # Configuración de la página
 st.set_page_config(
-    page_title="Gestión de Reportes - Municipalidad",
+    page_title="Sistema de Gestión y Reportes Municipales",
     page_icon="🛡️",
     layout="wide",
 )
 
-# Estilo visual limpio y profesional
+# Estilos visuales personalizados
 st.markdown(
     """
     <style>
-    .main-header {
-        font-size: 26px;
-        font-weight: bold;
-        color: #1E3A8A;
-        margin-bottom: 10px;
+    .main { background-color: #0e1117; color: #ffffff; }
+    .stTextInput > div > div > input, .stSelectbox > div > div > select, .stTextArea > div > div > textarea {
+        background-color: #1a1c24; color: white; border: 1px solid #30363d; border-radius: 6px;
     }
-    .sub-header {
-        font-size: 16px;
-        color: #4B5563;
-        margin-bottom: 25px;
-    }
-    .card {
-        background-color: #F8FAFC;
-        padding: 20px;
-        border-radius: 8px;
-        border-left: 5px solid #2563EB;
-        margin-bottom: 15px;
-    }
+    h1, h2, h3 { color: #58a6ff; }
     </style>
 """,
     unsafe_allow_html=True,
 )
 
-# Título principal
+# Lista completa de inspectores (47 en total)
+INSPECTORES = [
+    "Abanto Silva, Juan Carlos",
+    "Alva Bazán, María Elena",
+    "Becerra Vargas, Luis Alberto",
+    "Cabrera Cueva, Renato Omar",
+    "Campos Rojas, Víctor Manuel",
+    "Cerdán Huamán, Rosa María",
+    "Chávez Medina, Jorge Luis",
+    "Cerdán Silva, Carmen Rosa",
+    "Dávila Pinedo, Carlos Enrique",
+    "Díaz Sánchez, Ana Lucía",
+    "Espinoza Torres, José Antonio",
+    "Fernández Coronel, Manuel",
+    "Flores Ramos, Patricia Milagros",
+    "Gálvez Pérez, Walter Raúl",
+    "García Huamán, Segundo",
+    "González Medina, Rosa Isela",
+    "Guevara Silva, Marco Antonio",
+    "Hernández Rojas, Juana",
+    "Huamán Cerdán, Pedro Pablo",
+    "Llanos Sánchez, Kelly",
+    "López Alva, Miguel Ángel",
+    "Marín Torres, Carmen",
+    "Medina Vargas, Luis Enrique",
+    "Mejía Cueva, Rosa",
+    "Mendoza Rojas, Carlos",
+    "Muñoz Silva, Javier",
+    "Narro Pérez, Lucía",
+    "Paredes Castillo, Roberto",
+    "Pérez Sánchez, Miguel",
+    "Pinedo Ramos, Juan",
+    "Quispe Mendoza, Ana",
+    "Ramos Silva, Carlos",
+    "Ríos Torres, María",
+    "Rodríguez Alva, José",
+    "Rojas Cerdán, Luis",
+    "Sánchez Vargas, Rosa",
+    "Silva Medina, Pedro",
+    "Torres Rojas, Juan",
+    "Valera Pérez, Carlos",
+    "Vargas Cueva, María",
+    "Vásquez Silva, Jorge",
+    "Velásquez Ramos, Luis",
+    "Zelada Torres, Ana",
+    "Zorrilla Medina, Carlos",
+    "Zurita Rojas, Rosa",
+    "Poma Alva, Manuel",
+    "Rázuri Silva, Carmen",
+]
+
+# Título Principal
 st.markdown(
-    '<div class="main-header">🛡️ Sistema de Gestión y Reportes Municipales</div>',
+    "<h1>🛡️ Sistema de Gestión y Reportes Municipales</h1>",
     unsafe_allow_html=True,
 )
 st.markdown(
-    '<div class="sub-header">Módulo de control operativo, videovigilancia y comunicaciones de campo</div>',
+    "<h4>Módulo de control operativo, videovigilancia y comunicaciones de"
+    " campo</h4>",
     unsafe_allow_html=True,
 )
+st.markdown("---")
 
-# Simulación de base de datos local en memoria para la sesión
-if "reportes" not in st.session_state:
-    st.session_state.reportes = [
-        {
-            "id": 101,
-            "area": "Videovigilancia",
-            "operador": "Roca C.",
-            "detalle": "Mantenimiento preventivo de cámara domo en sector central.",
-            "estado": "Completado",
-            "fecha": "2026-09-14",
-        },
-        {
-            "id": 102,
-            "area": "Radio Comunicación",
-            "operador": "Central Base",
-            "detalle": (
-                "Revisión de frecuencias y canales de patrullaje nocturno."
-            ),
-            "estado": "En Proceso",
-            "fecha": "2026-09-15",
-        },
-    ]
-
-# Menú lateral
+# Menú de Navegación Lateral
 menu = st.sidebar.selectbox(
     "Menú de Navegación",
     [
-        "📋 Ver Reportes Activos",
-        "➕ Registrar Nuevo Reporte",
-        "📊 Panel de Estadísticas",
+        "Registrar Nuevo Reporte",
+        "Ver Registros / Exportar Excel",
+        "Control de Equipos (Radios y Bodycams)",
     ],
 )
 
-if menu == "📋 Ver Reportes Activos":
-    st.subheader("Listado General de Incidencias y Reportes")
+# Inicializar base de datos temporal en memoria si no existe
+if "registros" not in st.session_state:
+  st.session_state["registros"] = []
 
-    # Filtros rápidos
-    filtro_estado = st.selectbox(
-        "Filtrar por estado", ["Todos", "En Proceso", "Completado"]
+if menu == "Registrar Nuevo Reporte":
+  st.subheader("Ingresar Nuevo Registro Operativo")
+
+  col1, col2 = st.columns(2)
+
+  with col1:
+    area = st.selectbox(
+        "Área de Operación",
+        [
+            "Videovigilancia",
+            "Inspección de Tránsito",
+            "Radiocomunicaciones",
+            "Operativo Conjunto",
+        ],
+    )
+    inspector = st.selectbox(
+        "Inspector / Operador Responsable", sorted(INSPECTORES)
     )
 
-    for rep in st.session_state.reportes:
-        if filtro_estado == "Todos" or rep["estado"] == filtro_estado:
-            color_badge = (
-                "🟢" if rep["estado"] == "Completado" else "🟡"
-            )
-            with st.container():
-                st.markdown(
-                    f"""
-                <div class="card">
-                    <b>Reporte #{rep['id']}</b> | <b>Área:</b> {rep['area']} | <b>Responsable:</b> {rep['operador']}<br>
-                    <b>Detalle:</b> {rep['detalle']}<br>
-                    <b>Estado:</b> {color_badge} {rep['estado']} &nbsp;&nbsp;|&nbsp;&nbsp; <i>Fecha: {rep['fecha']}</i>
-                </div>
-                """,
-                    unsafe_allow_html=True,
-                )
-
-elif menu == "➕ Registrar Nuevo Reporte":
-    st.subheader("Ingresar Nuevo Registro Operativo")
-
-    with st.form("form_reporte"):
-        col1, col2 = st.columns(2)
-        with col1:
-            area_op = st.selectbox(
-                "Área de Operación",
-                [
-                    "Videovigilancia",
-                    "Radio Comunicación",
-                    "Cuerpo de Inspectores",
-                    "Logística",
-                ],
-            )
-            operador_name = st.text_input(
-                "Nombre del Técnico / Operador", value="Roca"
-            )
-        with col2:
-            estado_op = st.selectbox(
-                "Estado Inicial", ["En Proceso", "Completado"]
-            )
-            fecha_op = st.date_input(
-                "Fecha del Reporte", datetime.date.today()
-            )
-
-        detalle_op = st.text_area(
-            "Descripción de la Actividad o Incidencia"
-        )
-
-        submit_btn = st.form_submit_button("Guardar y Registrar Reporte")
-
-        if submit_btn:
-            if detalle_op.strip() == "":
-                st.error("Por favor, ingrese una descripción detallada.")
-            else:
-                nuevo_id = (
-                    st.session_state.reportes[-1]["id"] + 1
-                    if st.session_state.reportes
-                    else 101
-                )
-                nuevo_registro = {
-                    "id": nuevo_id,
-                    "area": area_op,
-                    "operador": operador_name,
-                    "detalle": detalle_op,
-                    "estado": estado_op,
-                    "fecha": str(fecha_op),
-                }
-                st.session_state.reportes.append(nuevo_registro)
-                st.success(
-                    f"¡Reporte #{nuevo_id} guardado con éxito en el sistema!"
-                )
-
-elif menu == "📊 Panel de Estadísticas":
-    st.subheader("Resumen y Métricas Generales")
-
-    total_rep = len(st.session_state.reportes)
-    completados = sum(
-        1 for r in st.session_state.reportes if r["estado"] == "Completado"
+  with col2:
+    estado = st.selectbox(
+        "Estado Inicial", ["En Proceso", "Completado", "Pendiente de Apoyo"]
     )
-    proceso = total_rep - completados
+    fecha_reporte = st.date_input(
+        "Fecha del Reporte", datetime.date.today()
+    )
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Registros", total_rep)
-    col2.metric("Completados", completados)
-    col3.metric("En Proceso", proceso)
+  descripcion = st.text_area(
+      "Descripción de la Actividad o Incidencia",
+      placeholder=(
+          "Detalle las novedades del turno, incidencias reportadas por radio o"
+          " uso de bodycams..."
+      ),
+  )
 
-    st.markdown("---")
-    st.info("Sistema operando de forma autónoma y sincronizada.")
+  if st.button("Guardar y Registrar Reporte"):
+    if descripcion.strip() == "":
+      st.warning(
+          "Por favor ingrese una descripción antes de guardar el reporte."
+      )
+    else:
+      nuevo_registro = {
+          "Fecha": str(fecha_reporte),
+          "Área": area,
+          "Inspector": inspector,
+          "Estado": estado,
+          "Descripción": descripcion,
+      }
+      st.session_state["registros"].append(nuevo_registro)
+      st.success(
+          "¡Reporte guardado correctamente en el sistema de la municipalidad!"
+      )
+
+elif menu == "Ver Registros / Exportar Excel":
+  st.subheader("Historial de Registros Operativos")
+
+  if len(st.session_state["registros"]) == 0:
+    st.info("Aún no hay registros guardados en esta sesión.")
+  else:
+    df = pd.DataFrame(st.session_state["registros"])
+    st.dataframe(df, use_container_width=True)
+
+    # Botón para exportar a Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+      df.to_excel(writer, index=False, sheet_name="Reportes_Municipales")
+    excel_data = output.getvalue()
+
+    st.download_button(
+        label="📥 Descargar Reporte en Excel",
+        data=excel_data,
+        file_name=f"Reportes_Municipales_{datetime.date.today()}.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+    )
+
+elif menu == "Control de Equipos (Radios y Bodycams)":
+  st.subheader("Control de Asignación de Equipos de Campo")
+  st.markdown(
+      "Asigne radios portátiles y cámaras corporales (bodycams) a los inspectores"
+      " en turno:"
+  )
+
+  inspector_equipo = st.selectbox(
+      "Seleccionar Inspector", sorted(INSPECTORES), key="eq_inspector"
+  )
+  radio_code = st.text_input(
+      "Código de Radio Portátil Asignada (Ej: RAD-014)"
+  )
+  bodycam_code = st.text_input(
+      "Código de Bodycam Asignada (Ej: BCAM-008)"
+  )
+
+  if st.button("Registrar Asignación de Equipo"):
+    st.success(
+        f"Equipo registrado con éxito para el inspector {inspector_equipo}:"
+        f" Radio [{radio_code}] | Bodycam [{bodycam_code}]"
+    )

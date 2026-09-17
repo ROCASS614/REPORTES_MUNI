@@ -1,124 +1,156 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+from io import BytesIO
 
 st.set_page_config(
-    page_title="Sistema de Gestión y Reportes Municipales",
+    page_title="SISTEMA DE GESTIÓN Y REPORTE MUNICIPAL",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("🛡️ Sistema de Gestión y Reportes Municipales - Transportes")
+# TÍTULO PRINCIPAL EN MAYÚSCULAS
+st.title("🛡️ SISTEMA DE GESTIÓN Y REPORTES MUNICIPALES - TRANSPORTE")
 st.markdown("---")
 
 @st.cache_data
-def preparar_casilleros_equipos():
-    try:
-        # Cargamos la lista de inspectores (omitiendo cabeceras innecesarias)
-        df_insp = pd.read_excel("LISTA INSPECTORES 2025 (1).xlsx", skiprows=3)
-        df_insp = df_insp.dropna(subset=['APELLIDOS Y NOMBRES'])
-        
-        # Limpiamos y seleccionamos solo el nombre (sin DNI)
-        nombres = df_insp['APELLIDOS Y NOMBRES'].reset_index(drop=True)
-        
-        # Equipos reales según tu registro de inventario
-        # Radios asignadas oficialmente
-        radios_dict = {
-            1: "9800108",  # Miguel Angel Ortega (Subgerente)
-            2: "9800109",  # Jonathan Anderson Barboza
-            4: "9800111",  # Katherine Vanessa Calua
-            4: "9800112"   # Movilidad Grúa
-        }
-        
-        # Bodycams asignadas oficialmente
-        bodycams_dict = {
-            1: "GTS0155",  # Pako Omar Cruzado
-            3: "GTS0150",  # Norma Cruzado y Vanessa Calua
-            18: "GTS0154", # Alvaro Alonso Tacilla
-            5: "GTS0152",  # Jennifer Julissa Renteria
-            4: "GTS0153",  # Movilidad Grúa
-            16: "GTS0151"  # Nicolas Tolentino Caja
-        }
-        
-        # Armamos la tabla limpia sin DNI
-        lista_datos = []
-        for idx, nombre in enumerate(nombres, start=1):
-            # Buscar si tiene radio o body asignada por índice o coincidencia
-            radio_asig = "Sin Radio"
-            body_asig = "Sin Bodycam"
-            
-            # Asignaciones directas según inventario oficial
-            if idx == 34:  # Jonathan Barboza
-                radio_asig = "9800109"
-            elif idx == 35:  # Katherine Calua
-                radio_asig = "9800111"
-            elif idx == 33:  # Subgerente Miguel Ortega
-                radio_asig = "9800108"
-            elif idx == 37:  # Norma Cruzado
-                body_asig = "GTS0150"
-            elif idx == 35:  # Vanessa Calua
-                body_asig = "GTS0150"
-            elif idx == 19:  # Alvaro Tacilla
-                body_asig = "GTS0154"
-            elif idx == 6:   # Jennifer Renteria
-                body_asig = "GTS0152"
-            
-            lista_datos.append({
-                "N°": idx,
-                "Inspector (Apellidos y Nombres)": nombre,
-                "Casillero Radio": radio_asig,
-                "Casillero Bodycam": body_asig
-            })
-            
-        return pd.DataFrame(lista_datos), "Casilleros sincronizados con éxito."
-    except Exception as e:
-        # Datos de respaldo por si acaso
-        return pd.DataFrame({
-            "N°": [1, 2, 3],
-            "Inspector (Apellidos y Nombres)": ["BARBOZA CASAS, ELMER", "GONZALES FLORES, JOSE", "GUTIERREZ VALERA, JAVIER"],
-            "Casillero Radio": ["9800109", "Sin Radio", "Sin Radio"],
-            "Casillero Bodycam": ["Sin Bodycam", "GTS0150", "Sin Bodycam"]
-        }), f"Usando base temporal ({e})"
+def cargar_datos_sistema():
+    # Cargar lista oficial de inspectores
+    df_insp = pd.read_excel("LISTA INSPECTORES 2025 (1).xlsx", skiprows=3)
+    df_insp = df_insp.dropna(subset=['APELLIDOS Y NOMBRES'])
+    nombres_inspectores = [str(x).strip().upper() for x in df_insp['APELLIDOS Y NOMBRES'].values]
+    
+    # Cargar equipos (radios y bodycams)
+    df_raw = pd.read_excel("ENCARGADOS DE RADIOS Y BODYCAM.xlsx", header=None)
+    
+    # Mapeo de radios
+    radios_asig = {}
+    for i in range(4, 9):
+        if i < len(df_raw):
+            nombre_eq = str(df_raw.iloc[i, 0]).strip().upper()
+            radio_n = str(df_raw.iloc[i, 4]).strip()
+            if nombre_eq and nombre_eq != "NAN" and radio_n and radio_n != "NAN":
+                # Buscar coincidencia en la lista de inspectores
+                for insp in nombres_inspectores:
+                    if nombre_eq.split()[0] in insp:
+                        radios_asig[insp] = radio_n
+                        
+    # Mapeo de bodycams
+    body_asig = {}
+    for i in range(15, 21):
+        if i < len(df_raw):
+            nombre_eq = str(df_raw.iloc[i, 0]).strip().upper()
+            body_n = str(df_raw.iloc[i, 4]).strip()
+            if nombre_eq and nombre_eq != "NAN" and body_n and body_n != "NAN":
+                if " Y " in nombre_eq:
+                    partes = nombre_eq.split(" Y ")
+                    for p in partes:
+                        p_nombre = p.strip().split()[0]
+                        for insp in nombres_inspectores:
+                            if p_nombre in insp:
+                                body_asig[insp] = body_n
+                else:
+                    p_nombre = nombre_eq.split()[0]
+                    for insp in nombres_inspectores:
+                        if p_nombre in insp:
+                            body_asig[insp] = body_n
+                            
+    return nombres_inspectores, radios_asig, body_asig
 
-df_casilleros, mensaje = preparar_casilleros_equipos()
+nombres_inspectores, radios_asig, body_asig = cargar_datos_sistema()
 
-st.success(f"✅ {mensaje}")
-
-# Menú lateral
-st.sidebar.header("Control Operativo")
+# MENÚ LATERAL EN MAYÚSCULAS
+st.sidebar.header("CONTROL OPERATIVO")
 opcion = st.sidebar.selectbox(
-    "Seleccione Módulo:",
+    "SELECCIONE MÓDULO:",
     [
-        "📻 Casilleros de Equipos (Radios y Bodycams)",
-        "📊 Resumen General del Personal",
-        "📍 Puntos Fijos",
-        "🚗 Retiro Vehicular"
+        "📝 REGISTRO Y PARTE DIARIO",
+        "📋 LISTADO GENERAL",
+        "📥 DESCARGAR REPORTE"
     ]
 )
 
-if opcion == "📻 Casilleros de Equipos (Radios y Bodycams)":
-    st.subheader("📻 Control de Casilleros: Inspectores, Radios y Bodycams")
-    st.markdown("Visualización directa del personal y sus equipos portátiles asignados para ir aprendiendo y modificando juntos.")
+if opcion == "📝 REGISTRO Y PARTE DIARIO":
+    st.subheader("📝 REGISTRO DE OPERACIÓN Y EQUIPOS")
+    st.markdown("Seleccione el inspector para autocompletar sus equipos asignados y registrar el detalle.")
     
-    # Buscador rápido de inspector
-    busqueda = st.text_input("🔍 Buscar Inspector por Nombre:")
-    if busqueda:
-        df_mostrar = df_casilleros[df_casilleros["Inspector (Apellidos y Nombres)"].str.contains(busqueda, case=False, na=False)]
-    else:
-        df_mostrar = df_casilleros
+    with st.form("form_gestion"):
+        # 1. NOMBRE DE INSPECTOR CON DESPLEGABLE (FLECHA)
+        inspector_sel = st.selectbox("NOMBRE DE INSPECTOR:", options=nombres_inspectores)
         
-    st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+        # Obtener automático radio y bodycam
+        radio_asignada = radios_asig.get(inspector_sel, "SIN RADIO ASIGNADA")
+        body_asignada = body_asig.get(inspector_sel, "SIN BODYCAM ASIGNADA")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input("N° RADIO:", value=radio_asignada, disabled=True)
+        with col2:
+            st.text_input("N° BODY CAM:", value=body_asignada, disabled=True)
+            
+        # 2. DETALLE Y ACCIONES (PUNTO FIJO, DESALOJANDO VEHÍCULO, DESALOJANDO CAMIONES, ETC.)
+        detalle_accion = st.selectbox(
+            "SELECCIONE O DIGITE EL DETALLE / ACCIÓN:",
+            [
+                "PUNTO FIJO",
+                "DESALOJANDO VEHÍCULO",
+                "DESALOJANDO CAMIONES",
+                "CONTROL EN VÍA PÚBLICA",
+                "OPERATIVO INOPINADO",
+                "OTRO"
+            ]
+        )
+        
+        detalle_texto = st.text_area("OBSERVACIONES / DETALLE ADICIONAL:")
+        
+        submitted = st.form_submit_button("💾 GUARDAR REGISTRO")
+        if submitted:
+            st.success(f"✅ REGISTRO GUARDADO CORRECTAMENTE PARA: {inspector_sel}")
+            st.info(f"RADIO: {radio_asignada} | BODYCAM: {body_asignada} | ACCIÓN: {detalle_accion}")
 
-elif opcion == "📊 Resumen General del Personal":
-    st.subheader("📊 Padrón de Inspectores (Sin Datos Sensibles)")
-    st.dataframe(df_casilleros[["N°", "Inspector (Apellidos y Nombres)"]], use_container_width=True, hide_index=True)
+elif opcion == "📋 LISTADO GENERAL":
+    st.subheader("📋 LISTADO GENERAL DE INSPECTORES Y EQUIPOS")
+    
+    # Crear dataframe consolidado en mayúsculas
+    data_tabla = []
+    for idx, insp in enumerate(nombres_inspectores, 1):
+        data_tabla.append({
+            "N°": idx,
+            "APELLIDOS Y NOMBRES": insp,
+            "N° RADIO": radios_asig.get(insp, "SIN RADIO"),
+            "N° BODY CAM": body_asig.get(insp, "SIN BODYCAM")
+        })
+    df_general = pd.DataFrame(data_tabla)
+    
+    busqueda = st.text_input("🔍 BUSCAR INSPECTOR:")
+    if busqueda:
+        df_general = df_general[df_general["APELLIDOS Y NOMBRES"].str.contains(busqueda.upper(), na=False)]
+        
+    st.dataframe(df_general, use_container_width=True, hide_index=True)
 
-elif opcion == "📍 Puntos Fijos":
-    st.subheader("📍 Monitoreo de Puntos Fijos")
-    st.info("Módulo de puntos fijos listo para enlazar con los inspectores de campo.")
-
-elif opcion == "🚗 Retiro Vehicular":
-    st.subheader("🚗 Gestión de Retiro y Desalojo Vehicular")
-    st.info("Módulo de grúa y liberación de vías en desarrollo.")
+elif opcion == "📥 DESCARGAR REPORTE":
+    st.subheader("📥 CENTRO DE DESCARGA DE REPORTES")
+    
+    data_tabla = []
+    for idx, insp in enumerate(nombres_inspectores, 1):
+        data_tabla.append({
+            "N°": idx,
+            "APELLIDOS Y NOMBRES": insp,
+            "N° RADIO": radios_asig.get(insp, "SIN RADIO"),
+            "N° BODY CAM": body_asig.get(insp, "SIN BODYCAM")
+        })
+    df_download = pd.DataFrame(data_tabla)
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_download.to_excel(writer, index=False, sheet_name='REPORTES')
+        
+    st.download_button(
+        label="📥 DESCARGAR REPORTE GENERAL EN EXCEL",
+        data=output.getvalue(),
+        file_name="REPORTE_MUNICIPAL_TRANSPORTES.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
          
    

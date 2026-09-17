@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 from io import BytesIO
+import os
 
 st.set_page_config(
     page_title="SISTEMA DE GESTIÓN Y REPORTE MUNICIPAL",
@@ -16,46 +16,81 @@ st.markdown("---")
 
 @st.cache_data
 def cargar_datos_sistema():
-    # Cargar lista oficial de inspectores
-    df_insp = pd.read_excel("LISTA INSPECTORES 2025 (1).xlsx", skiprows=3)
-    df_insp = df_insp.dropna(subset=['APELLIDOS Y NOMBRES'])
-    nombres_inspectores = [str(x).strip().upper() for x in df_insp['APELLIDOS Y NOMBRES'].values]
-    
-    # Cargar equipos (radios y bodycams)
-    df_raw = pd.read_excel("ENCARGADOS DE RADIOS Y BODYCAM.xlsx", header=None)
-    
-    # Mapeo de radios
+    nombres_inspectores = []
     radios_asig = {}
-    for i in range(4, 9):
-        if i < len(df_raw):
-            nombre_eq = str(df_raw.iloc[i, 0]).strip().upper()
-            radio_n = str(df_raw.iloc[i, 4]).strip()
-            if nombre_eq and nombre_eq != "NAN" and radio_n and radio_n != "NAN":
-                # Buscar coincidencia en la lista de inspectores
-                for insp in nombres_inspectores:
-                    if nombre_eq.split()[0] in insp:
-                        radios_asig[insp] = radio_n
-                        
-    # Mapeo de bodycams
     body_asig = {}
-    for i in range(15, 21):
-        if i < len(df_raw):
-            nombre_eq = str(df_raw.iloc[i, 0]).strip().upper()
-            body_n = str(df_raw.iloc[i, 4]).strip()
-            if nombre_eq and nombre_eq != "NAN" and body_n and body_n != "NAN":
-                if " Y " in nombre_eq:
-                    partes = nombre_eq.split(" Y ")
-                    for p in partes:
-                        p_nombre = p.strip().split()[0]
+    
+    # Buscar archivos con nombres alternativos comunes para evitar errores
+    archivo_insp = None
+    for f in ["LISTA INSPECTORES 2025 (1).xlsx", "LISTA INSPECTORES 2025.xlsx", "inspectores.xlsx"]:
+        if os.path.exists(f):
+            archivo_insp = f
+            break
+            
+    archivo_eq = None
+    for f in ["ENCARGADOS DE RADIOS Y BODYCAM.xlsx", "equipos.xlsx"]:
+        if os.path.exists(f):
+            archivo_eq = f
+            break
+            
+    try:
+        if archivo_insp:
+            df_insp = pd.read_excel(archivo_insp, skiprows=3)
+            df_insp = df_insp.dropna(subset=[df_insp.columns[1] if len(df_insp.columns) > 1 else 0])
+            # Intentar encontrar la columna de nombres
+            col_nombre = None
+            for col in df_insp.columns:
+                if "APELLIDO" in str(col).upper() or "NOMBRE" in str(col).upper():
+                    col_nombre = col
+                    break
+            if col_nombre is None:
+                col_nombre = df_insp.columns[1] if len(df_insp.columns) > 1 else df_insp.columns[0]
+                
+            nombres_inspectores = [str(x).strip().upper() for x in df_insp[col_nombre].dropna().values]
+        else:
+            # Lista de respaldo si no se suben los archivos todavía
+            nombres_inspectores = [
+                "BARBOZA CASAS, ELMER OSCAR",
+                "GONZALES FLORES, JOSE EDUARDO",
+                "GUTIERREZ VALERA, JAVIER HERNAN",
+                "PÉREZ PÉREZ, JOSE OSCAR",
+                "ROJAS MURRUGARRA, ANGEL GABRIEL"
+            ]
+            
+        if archivo_eq:
+            df_raw = pd.read_excel(archivo_eq, header=None)
+            
+            # Mapeo de radios
+            for i in range(4, 15):
+                if i < len(df_raw):
+                    nombre_eq = str(df_raw.iloc[i, 0]).strip().upper()
+                    radio_n = str(df_raw.iloc[i, 4]).strip() if df_raw.shape[1] > 4 else ""
+                    if nombre_eq and nombre_eq != "NAN" and radio_n and radio_n != "NAN":
                         for insp in nombres_inspectores:
-                            if p_nombre in insp:
-                                body_asig[insp] = body_n
-                else:
-                    p_nombre = nombre_eq.split()[0]
-                    for insp in nombres_inspectores:
-                        if p_nombre in insp:
-                            body_asig[insp] = body_n
-                            
+                            if nombre_eq.split()[0] in insp:
+                                radios_asig[insp] = radio_n
+                                
+            # Mapeo de bodycams
+            for i in range(15, 25):
+                if i < len(df_raw):
+                    nombre_eq = str(df_raw.iloc[i, 0]).strip().upper()
+                    body_n = str(df_raw.iloc[i, 4]).strip() if df_raw.shape[1] > 4 else ""
+                    if nombre_eq and nombre_eq != "NAN" and body_n and body_n != "NAN":
+                        if " Y " in nombre_eq:
+                            partes = nombre_eq.split(" Y ")
+                            for p in partes:
+                                p_nombre = p.strip().split()[0]
+                                for insp in nombres_inspectores:
+                                    if p_nombre in insp:
+                                        body_asig[insp] = body_n
+                        else:
+                            p_nombre = nombre_eq.split()[0]
+                            for insp in nombres_inspectores:
+                                if p_nombre in insp:
+                                    body_asig[insp] = body_n
+    except Exception as e:
+        st.error(f"Error al procesar archivos: {e}")
+        
     return nombres_inspectores, radios_asig, body_asig
 
 nombres_inspectores, radios_asig, body_asig = cargar_datos_sistema()
@@ -89,7 +124,7 @@ if opcion == "📝 REGISTRO Y PARTE DIARIO":
         with col2:
             st.text_input("N° BODY CAM:", value=body_asignada, disabled=True)
             
-        # 2. DETALLE Y ACCIONES (PUNTO FIJO, DESALOJANDO VEHÍCULO, DESALOJANDO CAMIONES, ETC.)
+        # 2. DETALLE Y ACCIONES
         detalle_accion = st.selectbox(
             "SELECCIONE O DIGITE EL DETALLE / ACCIÓN:",
             [
@@ -112,7 +147,6 @@ if opcion == "📝 REGISTRO Y PARTE DIARIO":
 elif opcion == "📋 LISTADO GENERAL":
     st.subheader("📋 LISTADO GENERAL DE INSPECTORES Y EQUIPOS")
     
-    # Crear dataframe consolidado en mayúsculas
     data_tabla = []
     for idx, insp in enumerate(nombres_inspectores, 1):
         data_tabla.append({
@@ -152,5 +186,3 @@ elif opcion == "📥 DESCARGAR REPORTE":
         file_name="REPORTE_MUNICIPAL_TRANSPORTES.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-         
-   

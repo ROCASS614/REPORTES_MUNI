@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import random
 
 st.set_page_config(
     page_title="Sistema de Gestión y Reportes Municipales",
@@ -12,67 +11,114 @@ st.set_page_config(
 st.title("🛡️ Sistema de Gestión y Reportes Municipales - Transportes")
 st.markdown("---")
 
-# Generación directa y robusta de los 47 inspectores reales
 @st.cache_data
-def generar_datos_reales():
-    inspectores_lista = [f"Inspector {i}" for i in range(1, 48)]
-    calles_lista = ["Jr. Dos de Mayo", "Av. Perú", "Plaza de Armas", "Jr. Junín", "Av. Atahualpa", "Óvalo del Inca", "Jr. Apurímac", "Cápac Yupanqui"]
-    
-    random.seed(101)
-    data = {
-        "ID": [f"INS-{i:03d}" for i in range(1, 48)],
-        "Inspector": inspectores_lista,
-        "Ubicación / Calle": [random.choice(calles_lista) for _ in range(47)],
-        "Radio Asignada": [f"RADIO-{random.randint(100, 199)}" for _ in range(47)],
-        "Bodycam": [f"CAM-{random.randint(500, 599)}" for _ in range(47)],
-        "Punto Fijo": [random.choice(["Sí", "No"]) for _ in range(47)],
-        "Control Vehicular": [random.choice(["Operativo", "Desalojando Vehículo", "Retirado con Grúa", "Libre"]) for _ in range(47)],
-        "Turno": [random.choice(["Mañana", "Tarde", "Noche"]) for _ in range(47)]
-    }
-    return pd.DataFrame(data)
+def preparar_casilleros_equipos():
+    try:
+        # Cargamos la lista de inspectores (omitiendo cabeceras innecesarias)
+        df_insp = pd.read_excel("LISTA INSPECTORES 2025 (1).xlsx", skiprows=3)
+        df_insp = df_insp.dropna(subset=['APELLIDOS Y NOMBRES'])
+        
+        # Limpiamos y seleccionamos solo el nombre (sin DNI)
+        nombres = df_insp['APELLIDOS Y NOMBRES'].reset_index(drop=True)
+        
+        # Equipos reales según tu registro de inventario
+        # Radios asignadas oficialmente
+        radios_dict = {
+            1: "9800108",  # Miguel Angel Ortega (Subgerente)
+            2: "9800109",  # Jonathan Anderson Barboza
+            4: "9800111",  # Katherine Vanessa Calua
+            4: "9800112"   # Movilidad Grúa
+        }
+        
+        # Bodycams asignadas oficialmente
+        bodycams_dict = {
+            1: "GTS0155",  # Pako Omar Cruzado
+            3: "GTS0150",  # Norma Cruzado y Vanessa Calua
+            18: "GTS0154", # Alvaro Alonso Tacilla
+            5: "GTS0152",  # Jennifer Julissa Renteria
+            4: "GTS0153",  # Movilidad Grúa
+            16: "GTS0151"  # Nicolas Tolentino Caja
+        }
+        
+        # Armamos la tabla limpia sin DNI
+        lista_datos = []
+        for idx, nombre in enumerate(nombres, start=1):
+            # Buscar si tiene radio o body asignada por índice o coincidencia
+            radio_asig = "Sin Radio"
+            body_asig = "Sin Bodycam"
+            
+            # Asignaciones directas según inventario oficial
+            if idx == 34:  # Jonathan Barboza
+                radio_asig = "9800109"
+            elif idx == 35:  # Katherine Calua
+                radio_asig = "9800111"
+            elif idx == 33:  # Subgerente Miguel Ortega
+                radio_asig = "9800108"
+            elif idx == 37:  # Norma Cruzado
+                body_asig = "GTS0150"
+            elif idx == 35:  # Vanessa Calua
+                body_asig = "GTS0150"
+            elif idx == 19:  # Alvaro Tacilla
+                body_asig = "GTS0154"
+            elif idx == 6:   # Jennifer Renteria
+                body_asig = "GTS0152"
+            
+            lista_datos.append({
+                "N°": idx,
+                "Inspector (Apellidos y Nombres)": nombre,
+                "Casillero Radio": radio_asig,
+                "Casillero Bodycam": body_asig
+            })
+            
+        return pd.DataFrame(lista_datos), "Casilleros sincronizados con éxito."
+    except Exception as e:
+        # Datos de respaldo por si acaso
+        return pd.DataFrame({
+            "N°": [1, 2, 3],
+            "Inspector (Apellidos y Nombres)": ["BARBOZA CASAS, ELMER", "GONZALES FLORES, JOSE", "GUTIERREZ VALERA, JAVIER"],
+            "Casillero Radio": ["9800109", "Sin Radio", "Sin Radio"],
+            "Casillero Bodycam": ["Sin Bodycam", "GTS0150", "Sin Bodycam"]
+        }), f"Usando base temporal ({e})"
 
-df_inspectores = generar_datos_reales()
+df_casilleros, mensaje = preparar_casilleros_equipos()
 
-st.success("✅ Base Operativa Conectada: 47 Inspectores Activos, Radios y Bodycams Sincronizados.")
+st.success(f"✅ {mensaje}")
 
 # Menú lateral
-st.sidebar.header("Control Operativo Municipal")
+st.sidebar.header("Control Operativo")
 opcion = st.sidebar.selectbox(
     "Seleccione Módulo:",
     [
-        "📊 Resumen General", 
-        "👮 Control de 47 Inspectores", 
-        "📻 Radios y Bodycams", 
-        "📍 Puntos Fijos", 
-        "🚗 Desalojo y Retiro de Vehículos"
+        "📻 Casilleros de Equipos (Radios y Bodycams)",
+        "📊 Resumen General del Personal",
+        "📍 Puntos Fijos",
+        "🚗 Retiro Vehicular"
     ]
 )
 
-if opcion == "📊 Resumen General":
-    st.subheader("📊 Panel Operativo General - Transportes")
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Inspectores", len(df_inspectores))
-    col2.metric("Radios Operativas", len(df_inspectores))
-    col3.metric("Bodycams Activas", len(df_inspectores))
-    col4.metric("Puntos Fijos", len(df_inspectores[df_inspectores["Punto Fijo"] == "Sí"]))
+if opcion == "📻 Casilleros de Equipos (Radios y Bodycams)":
+    st.subheader("📻 Control de Casilleros: Inspectores, Radios y Bodycams")
+    st.markdown("Visualización directa del personal y sus equipos portátiles asignados para ir aprendiendo y modificando juntos.")
     
-    st.markdown("### 📋 Listado Completo del Personal")
-    st.dataframe(df_inspectores, use_container_width=True)
+    # Buscador rápido de inspector
+    busqueda = st.text_input("🔍 Buscar Inspector por Nombre:")
+    if busqueda:
+        df_mostrar = df_casilleros[df_casilleros["Inspector (Apellidos y Nombres)"].str.contains(busqueda, case=False, na=False)]
+    else:
+        df_mostrar = df_casilleros
+        
+    st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
 
-elif opcion == "👮 Control de 47 Inspectores":
-    st.subheader("👮 Gestión y Ubicación de los 47 Inspectores")
-    st.dataframe(df_inspectores[["ID", "Inspector", "Ubicación / Calle", "Turno"]], use_container_width=True)
-
-elif opcion == "📻 Radios y Bodycams":
-    st.subheader("📻 Control de Equipos (Radios y Bodycams)")
-    st.dataframe(df_inspectores[["ID", "Inspector", "Radio Asignada", "Bodycam"]], use_container_width=True)
+elif opcion == "📊 Resumen General del Personal":
+    st.subheader("📊 Padrón de Inspectores (Sin Datos Sensibles)")
+    st.dataframe(df_casilleros[["N°", "Inspector (Apellidos y Nombres)"]], use_container_width=True, hide_index=True)
 
 elif opcion == "📍 Puntos Fijos":
     st.subheader("📍 Monitoreo de Puntos Fijos")
-    st.dataframe(df_inspectores[df_inspectores["Punto Fijo"] == "Sí"][["ID", "Inspector", "Ubicación / Calle", "Radio Asignada"]], use_container_width=True)
+    st.info("Módulo de puntos fijos listo para enlazar con los inspectores de campo.")
 
-elif opcion == "🚗 Desalojo y Retiro de Vehículos":
-    st.subheader("🚗 Gestión de Desalojo y Retiro de Vehículos")
-    st.dataframe(df_inspectores[["ID", "Inspector", "Ubicación / Calle", "Control Vehicular"]], use_container_width=True)
+elif opcion == "🚗 Retiro Vehicular":
+    st.subheader("🚗 Gestión de Retiro y Desalojo Vehicular")
+    st.info("Módulo de grúa y liberación de vías en desarrollo.")
          
    

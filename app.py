@@ -201,5 +201,3 @@ elif menu == "Control de Equipos (Radios y Bodycams)":
         f"Equipo registrado con éxito para el inspector {inspector_equipo}:"
         f" Radio [{radio_code}] | Bodycam [{bodycam_code}]"
     )
-
-
